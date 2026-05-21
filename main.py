@@ -1,4 +1,4 @@
-import networkx as nx
+ import networkx as nx
 import matplotlib.pyplot as plt
 
 class LogisticsSystem:
@@ -6,9 +6,10 @@ class LogisticsSystem:
         self.G = nx.DiGraph()
         self.source = None
         self.sink = None
+        self.required_cargo = None  
 
     def input_data(self):
-        print("=== ԼՈԳԻՍՏԻԿ ՀԱՄԱԿԱՐԳԻ ՄՈՒՏՔԱԳՐՈՒՄ (Min-Cost Max-Flow) ===")
+        print("=== ԼՈԳԻՍՏԻԿ ՀԱՄԱԿԱՐԳԻ ՄՈՒՏՔԱԳՐՈՒՄ ===")
         try:
             edges_count = int(input("Մուտքագրեք ճանապարհների քանակը: "))
             for i in range(edges_count):
@@ -22,6 +23,15 @@ class LogisticsSystem:
             
             self.source = input("\nՄուտքագրեք Source (Աղբյուր): ").strip()
             self.sink = input("Մուտքագրեք Sink (Ընդունիչ): ").strip()
+            
+            print("\n--- ԲԵՌՆԱՓՈԽԱԴՐՄԱՆ ՌԵԺԻՄ ---")
+            cargo_input = input("Մուտքագրեք անհրաժեշտ բեռի քանակը (տոննա) \n(Կամ սեղմեք ENTER՝ ամբողջ ցանցի ԱՌԱՎԵԼԱԳՈՒՅՆ հոսքն օգտագործելու համար): ").strip()
+            
+            if cargo_input == "":
+                self.required_cargo = "MAX"  
+            else:
+                self.required_cargo = int(cargo_input)
+            
         except ValueError:
             print("[!] Սխալ մուտքագրում: Խնդրում ենք օգտագործել թվեր:")
 
@@ -30,29 +40,40 @@ class LogisticsSystem:
             print("[!] Նշված կետերը գոյություն չունեն գրաֆում:")
             return
 
+        flow_dict = {}
+        total_min_cost = 0
+        actual_flow_value = 0
+
         try:
-            # 1. Find the best way to move the most goods with the lowest cost
-            flow_dict = nx.max_flow_min_cost(self.G, self.source, self.sink)
+            # Max-Flow 
+            if self.required_cargo == "MAX":
+                flow_dict = nx.max_flow_min_cost(self.G, self.source, self.sink)
+                actual_flow_value = sum(flow_dict[self.source].values())
+                total_min_cost = nx.cost_of_flow(self.G, flow_dict)
+                title_mode = f"Առավելագույն հոսքի օպտիմալացում: {actual_flow_value} տոննա"
             
-            # 2. Count the total tons of goods being moved
-            max_flow_value = sum(flow_dict[self.source].values())
+            # Fixed Cargo
+            else:
+                for node in self.G.nodes():
+                    self.G.nodes[node]['demand'] = 0
+                self.G.nodes[self.source]['demand'] = -self.required_cargo
+                self.G.nodes[self.sink]['demand'] = self.required_cargo
+                
+                total_min_cost, flow_dict = nx.network_simplex(self.G)
+                actual_flow_value = self.required_cargo
+                title_mode = f"Սահմանափակ բեռի օպտիմալացում: {actual_flow_value} տոննա"
 
-            # 3. Calculate the total cost (money) for the whole transport
-            total_min_cost = nx.cost_of_flow(self.G, flow_dict)
-
-            print(f"\nՕպտիմալացման արդյունք:")
-            print(f"Առավելագույն հոսք: {max_flow_value} տոննա")
+            print(f"\nՕպտիմալացման արդյունք ({self.required_cargo} ռեժիմ):")
+            print(f"Տեղափոխված բեռ: {actual_flow_value} տոննա")
             print(f"Ընդհանուր նվազագույն ծախս: {total_min_cost} միավոր")
 
             # Visualization
             plt.figure(figsize=(15, 10))
             pos = nx.spring_layout(self.G, k=2.5, seed=42) 
 
-            # Drawing of nodes
             nx.draw_networkx_nodes(self.G, pos, node_size=4000, node_color='#2ecc71', edgecolors='black', alpha=0.9)
             nx.draw_networkx_labels(self.G, pos, font_size=11, font_weight='bold')
 
-            # Label Preparation (Flow / Bandwidth | Cost)
             edge_labels = {}
             for u, v in self.G.edges():
                 f = flow_dict[u][v]
@@ -60,7 +81,6 @@ class LogisticsSystem:
                 w = self.G[u][v]['weight']
                 edge_labels[(u, v)] = f"Հ:{f}/Թ:{c}\nԱրժեք:{w}"
 
-            # Drawing of edges
             for u, v in self.G.edges():
                 is_active = flow_dict[u][v] > 0
                 color = '#e67e22' if is_active else '#95a5a6'
@@ -74,14 +94,14 @@ class LogisticsSystem:
             nx.draw_networkx_edge_labels(self.G, pos, edge_labels=edge_labels, font_color='black', 
                                          font_size=9, label_pos=0.5, font_weight='bold')
 
-            plt.title(f"Լոգիստիկ ցանցի նվազագույն արժեքով առավելագույն հոսքի օպտիմալացում\n"
-                      f"առավելագույն հոսք: {max_flow_value}-տոննա | նվազագույն արժեքը: {total_min_cost}-դրամ", fontsize=14)
+            plt.title(f"Լոգիստիկ ցանցի օպտիմալացում ({title_mode})\n"
+                      f"Ընդհանուր նվազագույն արժեքը: {total_min_cost} դրամ", fontsize=14)
             plt.axis('off')
             plt.tight_layout()
             plt.show()
 
         except nx.NetworkXUnfeasible:
-            print("[!] Հնարավոր չէ գտնել հոսքը (ստուգեք թողունակությունները):")
+            print(f"[!] Սխալ. Ցանցի թողունակությունը չի հերիքում {self.required_cargo} տոննա տեղափոխելու համար:")
         except Exception as e:
             print(f"[!] Տեղի է ունեցել սխալ: {e}")
 
